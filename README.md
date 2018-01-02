@@ -1,3 +1,6 @@
+## support mali driver version
+r4p0
+
 ## usage
 1. Boot an OS with close source driver installed into command line
 2. Start X server with xinit
