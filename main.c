@@ -39,8 +39,17 @@
 #define u64 uint64_t
 #define s64 int64_t
 
-#include "mali/mali_utgard_uk_types.h"
-#include "mali/mali_utgard_ioctl.h"
+#ifdef CONFIG_MALI_API_R4P0
+#include "r4p0/mali_utgard_uk_types.h"
+#include "r4p0/mali_utgard_ioctl.h"
+#endif
+
+#ifdef CONFIG_MALI_API_R6P1
+typedef unsigned long mali_bool;
+
+#include "r6p1/mali_utgard_uk_types.h"
+#include "r6p1/mali_utgard_ioctl.h"
+#endif
 
 static int mali_address_add(void *address, unsigned int size, unsigned int physical);
 static int mali_address_remove(void *address, int size);
@@ -51,7 +60,7 @@ static int mali_external_add(void *address, unsigned int physical,
 			     unsigned int size, unsigned int cookie);
 static int mali_external_remove(unsigned int cookie);
 static void mali_memory_dump(void);
-static void mali_mmu_dump(void *ctx);
+static void mali_mmu_dump(u64 ctx);
 
 static pthread_mutex_t serializer[1] = { PTHREAD_MUTEX_INITIALIZER };
 
@@ -80,17 +89,19 @@ int frame_count = 0;
 void
 lima_wrap_log_open(void)
 {
-	char *filename;
+	char *filename, *home;
 	char buffer[1024];
 
 	if (lima_wrap_log)
 		return;
 
 	filename = getenv("LIMA_WRAP_LOG");
-	if (!filename)
-		filename = "/home/yuq/log/log";
-
-	snprintf(buffer, sizeof(buffer), "%s.%04d", filename, frame_count);
+	if (filename)
+		snprintf(buffer, sizeof(buffer), "%s.%04d", filename, frame_count);
+	else {
+		home = getenv("HOME");
+		snprintf(buffer, sizeof(buffer), "%s/log/log.%04d", home, frame_count);
+	}
 
 	lima_wrap_log = fopen(buffer, "w");
 	if (!lima_wrap_log) {
@@ -431,6 +442,7 @@ dev_mali_get_api_version_post(void *data, int ret)
 	printf("Mali version: %d\n", mali_version);
 }
 
+#ifdef CONFIG_MALI_API_R4P0
 static void
 dev_mali_memory_attach_ump_mem_post(void *data, int ret)
 {
@@ -462,6 +474,7 @@ dev_mali_memory_unmap_ext_mem_post(void *data, int ret)
 
 	mali_external_remove(ext->cookie);
 }
+#endif
 
 static void
 dev_mali_pp_number_of_cores_post(void *data, int ret)
@@ -620,7 +633,7 @@ dev_mali_wait_for_notification_post(void *data, int ret)
 	if (notification->type == _MALI_NOTIFICATION_PP_FINISHED) {
 		printf("Finished frame %d\n", frame_count);
 		mali_memory_dump();
-		mali_mmu_dump(notification->ctx);
+		mali_mmu_dump((u64)notification->ctx);
 
 		/* We finished a frame */
 		lima_wrap_log_next();
@@ -801,15 +814,15 @@ dev_mali_pp_job_start_pre(void *data)
 
 	wrap_log("};\n");
 
-	mali_mmu_dump(job->ctx);
+	mali_mmu_dump((u64)job->ctx);
 }
 
 static void
 dev_mali_pp_and_gp_job_start_pre(void *data)
 {
 	_mali_uk_pp_and_gp_start_job_s *job = data;
-	dev_mali_gp_job_start_pre(job->gp_args);
-	dev_mali_pp_job_start_pre(job->pp_args);
+	dev_mali_gp_job_start_pre((void *)job->gp_args);
+	dev_mali_pp_job_start_pre((void *)job->pp_args);
 }
 
 static struct ioc_type {
@@ -851,12 +864,14 @@ static struct dev_mali_ioctl_table ioctl_table[] = {
 	{MALI_IOC_CORE_BASE, _MALI_UK_GET_API_VERSION, "CORE, GET_API_VERSION",
 	 dev_mali_get_api_version_pre, dev_mali_get_api_version_post},
 
+#ifdef CONFIG_MALI_API_R4P0
 	{MALI_IOC_MEMORY_BASE, _MALI_UK_ATTACH_UMP_MEM, "MEMORY, ATTACH_UMP_MEM",
 	 NULL, dev_mali_memory_attach_ump_mem_post},
 	{MALI_IOC_MEMORY_BASE, _MALI_UK_MAP_EXT_MEM, "MEMORY, MAP_EXT_MEM",
 	 NULL, dev_mali_memory_map_ext_mem_post},
 	{MALI_IOC_MEMORY_BASE, _MALI_UK_UNMAP_EXT_MEM, "MEMORY, UNMAP_EXT_MEM",
 	 NULL, dev_mali_memory_unmap_ext_mem_post},
+#endif
 
 	{MALI_IOC_PP_BASE, _MALI_UK_PP_START_JOB, "PP, START_JOB",
 	 dev_mali_pp_job_start_pre, NULL},
@@ -1008,7 +1023,7 @@ mali_external_add(void *address, unsigned int physical,
 		    (mali_externals[i].address < (address + size)) &&
 		    ((mali_externals[i].address + size) > address) &&
 		    ((mali_externals[i].address + size) <= (address + size))) {
-			printf("Error: Address 0x%08X (0x%x) is already taken!\n",
+			printf("Error: Address 0x%p (0x%x) is already taken!\n",
 			       address, size);
 			return -1;
 		}
@@ -1019,7 +1034,7 @@ mali_external_add(void *address, unsigned int physical,
 			break;
 
 	if (i == MALI_EXTERNALS) {
-		printf("Error: No more free memory slots for 0x%08X (0x%x)!\n",
+		printf("Error: No more free memory slots for 0x%p (0x%x)!\n",
 		       address, size);
 		return -1;
 	}
@@ -1229,10 +1244,10 @@ mali_memory_dump(void)
 }
 
 static void
-mali_mmu_dump(void *ctx)
+mali_mmu_dump(u64 ctx)
 {
 	_mali_uk_query_mmu_page_table_dump_size_s req1 = {
-		.ctx = ctx,
+		.ctx = (typeof(req1.ctx))ctx,
 		.size = 0,
 	};
 	_mali_uk_dump_mmu_page_table_s req2;
@@ -1255,9 +1270,9 @@ mali_mmu_dump(void *ctx)
 		return;
 	}
 
-	req2.ctx = ctx;
+	req2.ctx = (typeof(req2.ctx))ctx;
 	req2.size = req1.size;
-	req2.buffer = buffer;
+	req2.buffer = (typeof(req2.buffer))buffer;
 	ret = orig_ioctl(dev_mali_fd, MALI_IOC_MEM_DUMP_MMU_PAGE_TABLE, &req2);
 	if (ret) {
 		fprintf(stderr, "%s: fail to get dump\n", __func__);
@@ -1265,9 +1280,9 @@ mali_mmu_dump(void *ctx)
 		return;
 	}
 
-	wrap_log("\ndump pd %08x\n", *req2.page_table_dump);
-	pde = req2.page_table_dump + 1;
-	pte = req2.page_table_dump + 1 + 1024;
+	wrap_log("\ndump pd %08x\n", *(u32 *)req2.page_table_dump);
+	pde = (u32 *)req2.page_table_dump + 1;
+	pte = (u32 *)req2.page_table_dump + 1 + 1024;
 	for (i = 0; i < 1024; i++) {
 		if (pde[i]) {
 			wrap_log("%03d pde %08x pt %08x\n", i, pde[i], *pte++);
