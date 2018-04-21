@@ -718,9 +718,9 @@ struct lima_pp_wb_registers {
 	unsigned int downsample_factor;
 	unsigned int pixel_layout; /* todo: see formats.h */
 	unsigned int pitch; /* If layout is 2, then (width + 0x0F) / 16, else pitch / 8 */
-	unsigned int zero;
 	unsigned int mrt_bits; /* bits 0-3 are set for each of up to 4 render targets */
 	unsigned int mrt_pitch; /* address pitch between render targets */
+	unsigned int zero;
 	unsigned int unused0;
 	unsigned int unused1;
 	unsigned int unused2;
@@ -757,6 +757,8 @@ dev_mali_pp_job_start_pre(void *data)
 	wrap_log("\t.frame.height = 0x%x,\n", frame->height);
 	wrap_log("\t.frame.fragment_stack_address = 0x%x,\n", frame->fragment_stack_address);
 	wrap_log("\t.frame.fragment_stack_size = 0x%x,\n", frame->fragment_stack_size);
+	wrap_log("\t.frame.unused_1 = 0x%x,\n", frame->unused_1);
+	wrap_log("\t.frame.unused_2 = 0x%x,\n", frame->unused_2);
 	wrap_log("\t.frame.one = 0x%x,\n", frame->one);
 	wrap_log("\t.frame.supersampled_height = 0x%x,\n", frame->supersampled_height);
 	wrap_log("\t.frame.dubya = 0x%x,\n", frame->dubya);
@@ -779,6 +781,9 @@ dev_mali_pp_job_start_pre(void *data)
 	wrap_log("\t.wb0.zero = 0x%x,\n", wb0->zero);
 	wrap_log("\t.wb0.mrt_bits = 0x%x,\n", wb0->mrt_bits);
 	wrap_log("\t.wb0.mrt_pitch = 0x%x,\n", wb0->mrt_pitch);
+	wrap_log("\t.wb0.unused0 = 0x%x,\n", wb0->unused0);
+	wrap_log("\t.wb0.unused1 = 0x%x,\n", wb0->unused1);
+	wrap_log("\t.wb0.unused2 = 0x%x,\n", wb0->unused2);
 
 	wrap_log("\t.wb1.address = 0x%x,\n", wb1->address);
 	wrap_log("\t.wb1.pixel_format = 0x%x,\n", wb1->pixel_format);
